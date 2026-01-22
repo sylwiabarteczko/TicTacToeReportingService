@@ -8,9 +8,11 @@ import org.springframework.stereotype.Component;
 public class EventsConsumer {
 
     private final ObjectMapper objectMapper;
+    private final StatsStore statsStore;
 
-    public EventsConsumer(ObjectMapper objectMapper) {
+    public EventsConsumer(ObjectMapper objectMapper, StatsStore statsStore) {
         this.objectMapper = objectMapper;
+        this.statsStore = statsStore;
     }
 
     @KafkaListener(
@@ -19,16 +21,14 @@ public class EventsConsumer {
     )
     public void onMessage(String message) {
         try {
-            EventEnvelope env = objectMapper.readValue(message, EventEnvelope.class);
+            EventEnvelope event = objectMapper.readValue(message, EventEnvelope.class);
 
-            System.out.println("EVENT TYPE: " + env.eventType());
-            System.out.println("EVENT ID: " + env.eventId());
-            System.out.println("AT: " + env.occurredAt());
-            System.out.println("PAYLOAD: " + env.payload());
+            statsStore.handle(event);
 
         } catch (Exception e) {
             System.err.println("Cannot parse Kafka message as EventEnvelope. Raw: " + message);
             System.err.println("Error: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 }
