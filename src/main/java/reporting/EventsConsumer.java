@@ -20,6 +20,8 @@ public class EventsConsumer {
             groupId = "${tictactoe.kafka.groupId:tictactoe-reporting}"
     )
     public void onMessage(String message) {
+        System.out.println("📩 Kafka message received: " + message);
+        //tu ten komunikat powinien przyjsc, breakpoint i powinnam zobaczyc
         try {
             EventEnvelope event = objectMapper.readValue(message, EventEnvelope.class);
 
