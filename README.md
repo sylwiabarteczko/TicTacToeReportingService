@@ -69,3 +69,11 @@ Uses Flyway for schema migration. Tables are created automatically on first run:
 | `reporting_games` | Games with creation time and status |
 | `reporting_moves` | Individual moves with timestamps |
 | `reporting_ai_errors` | AI errors with messages and timestamps |
+
+## Screenshots
+
+| | |
+|:---:|---|
+| **Registration page** | <img src="https://raw.githubusercontent.com/sylwiabarteczko/TicTacToe/auto-ai/web/Register.png" width="400"/> |
+| **Login page** | <img src="https://raw.githubusercontent.com/sylwiabarteczko/TicTacToe/auto-ai/web/Login.png" width="400"/> |
+| **Game board** | <img src="https://raw.githubusercontent.com/sylwiabarteczko/TicTacToe/auto-ai/web/Game.png" width="400"/> |

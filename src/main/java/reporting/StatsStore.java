@@ -1,28 +1,33 @@
 package reporting;
 
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import reporting.model.ReportingAiError;
+import reporting.model.ReportingGame;
+import reporting.model.ReportingMove;
+import reporting.model.ReportingUser;
+import reporting.repository.AiErrorsRepository;
+import reporting.repository.GamesRepository;
+import reporting.repository.MovesRepository;
+import reporting.repository.UsersRepository;
 
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
-
-@Component
+@Service
 public class StatsStore {
 
-    private final StatsRepository repository;
-    private final Set<String> finishedGameIds = ConcurrentHashMap.newKeySet();
-    private final Set<String> createdGameIds = ConcurrentHashMap.newKeySet();
-    private final ConcurrentHashMap<Integer, AtomicInteger> ageHistogram = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, AtomicInteger> registrationByDayOfWeek = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, AtomicInteger> moveCountPerGame = new ConcurrentHashMap<>();
-    public StatsStore(StatsRepository repository) {
-        this.repository = repository;
-        if (repository.count() == 0) {
-            repository.save(new StatsEntity(0, 0, 0, 0));
-        }
-    }
+    private final UsersRepository usersRepository;
+    private final GamesRepository gamesRepository;
+    private final MovesRepository movesRepository;
+    private final AiErrorsRepository aiErrorsRepository;
 
+    public StatsStore(UsersRepository usersRepository,
+                      GamesRepository gamesRepository,
+                      MovesRepository movesRepository,
+                      AiErrorsRepository aiErrorsRepository) {
+        this.usersRepository = usersRepository;
+        this.gamesRepository = gamesRepository;
+        this.movesRepository = movesRepository;
+        this.aiErrorsRepository = aiErrorsRepository;
+    }
     // flyway, chce miec tabele z grami
     // potrzebujemy tabele, 1 tabela z uzytkownikami, identyfikator uzytkownika, ilu sie rejestruje,
     // ile srednio gier tworzy uzytkownik, data kiedy uzytkownik dolaczyl,
@@ -38,67 +43,54 @@ public class StatsStore {
         switch (event.eventType()) {
 
             case USER_REGISTERED -> {
-                repository.incrementRegisteredUsers();
-                Object ageObj = event.payload().get("age");
-                if (ageObj instanceof Integer age) {
-                    ageHistogram.computeIfAbsent(age, k -> new AtomicInteger(0)).incrementAndGet();
-                }
-                String day = java.time.LocalDate.now()
-                        .getDayOfWeek()
-                        .getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH);
-                registrationByDayOfWeek.computeIfAbsent(day, k -> new AtomicInteger(0)).incrementAndGet();
+                usersRepository.save(new ReportingUser(event.occurredAt()));
             }
             case GAME_CREATED -> {
-                repository.incrementGamesCreated();
-                String gameId = String.valueOf(event.payload().get("gameId"));
-                createdGameIds.add(gameId);
-                if (Boolean.TRUE.equals(event.payload().get("isAi"))) {
-                    repository.incrementAiGames();
-                }
+                Long gameId = toLong(event.payload().get("gameId"));
+                Long userId = toLong(event.payload().get("userId"));
+                boolean isAi = Boolean.TRUE.equals(event.payload().get("isAi"));
+                gamesRepository.save(new ReportingGame(gameId, userId, event.occurredAt(), isAi));
             }
             case MOVE_MADE -> {
-                String gameId = String.valueOf(event.payload().get("gameId"));
-                moveCountPerGame.computeIfAbsent(gameId, k -> new AtomicInteger(0)).incrementAndGet();
+                Long gameId = toLong(event.payload().get("gameId"));
+                movesRepository.save(new ReportingMove(gameId, event.occurredAt()));
             }
             case GAME_FINISHED -> {
-                repository.incrementGamesFinished();
-                String gameId = String.valueOf(event.payload().get("gameId"));
-                finishedGameIds.add(gameId);
+                Long gameId = toLong(event.payload().get("gameId"));
+                gamesRepository.markAsFinished(gameId);
             }
             case AI_ERROR -> {
-                System.out.println("⚠️ AI_ERROR for game: " + event.payload().get("gameId"));
+                Long gameId = toLong(event.payload().get("gameId"));
+                String message = String.valueOf(event.payload().get("message"));
+                aiErrorsRepository.save(new ReportingAiError(gameId, event.occurredAt(), message));
             }
             default -> {}
         }
 
-        System.out.println("📊 STATS:");
-        System.out.println("Users: " + getRegisteredUsers());
-        System.out.println("Games created: " + getGamesCreated());
-        System.out.println("Games finished: " + getGamesFinished());
-        System.out.println("Abandoned: " + getAbandonedGames());
-        System.out.println("AI games: " + getAiGamesCount());
-        System.out.println("------------");
+        System.out.println("📊 STATS: users=" + getRegisteredUsers()
+                + " games=" + getGamesCreated()
+                + " finished=" + getGamesFinished()
+                + " abandoned=" + getAbandonedGames());
     }
 
     public int getRegisteredUsers() {
-        return repository.findAll().stream().findFirst()
-                .map(StatsEntity::getRegisteredUsers).orElse(0);
+        return (int) usersRepository.count();
     }
 
     public int getGamesCreated() {
-        return repository.findAll().stream().findFirst()
-                .map(StatsEntity::getGamesCreated).orElse(0);
+        return (int) gamesRepository.count();
     }
 
     public int getGamesFinished() {
-        return repository.findAll().stream().findFirst()
-                .map(StatsEntity::getGamesFinished).orElse(0);
+        return (int) gamesRepository.countByFinishedTrue();
     }
 
     public int getAbandonedGames() {
-        return (int) createdGameIds.stream()
-                .filter(id -> !finishedGameIds.contains(id))
-                .count();
+        return (int) gamesRepository.countByFinishedFalse();
+    }
+
+    public int getAiGamesCount() {
+        return (int) gamesRepository.countAiGames();
     }
 
     public double getAiGamesPercentage() {
@@ -106,23 +98,16 @@ public class StatsStore {
         if (created == 0) return 0.0;
         return (double) getAiGamesCount() / created * 100;
     }
-    public int getAiGamesCount() {
-        return repository.findAll().stream().findFirst()
-                .map(StatsEntity::getAiGames).orElse(0);
-    }
+
     public double getAverageMoves() {
-        if (moveCountPerGame.isEmpty()) return 0.0;
-        return moveCountPerGame.values().stream()
-                .mapToInt(AtomicInteger::get)
-                .average()
-                .orElse(0.0);
+        Double avg = movesRepository.findAverageMoveCount();
+        return avg != null ? avg : 0.0;
     }
 
-    public ConcurrentHashMap<Integer, AtomicInteger> getAgeHistogram() {
-        return ageHistogram;
-    }
-    public ConcurrentHashMap<String, AtomicInteger> getRegistrationByDayOfWeek() {
-        return registrationByDayOfWeek;
+    private Long toLong(Object value) {
+        if (value instanceof Number n) return n.longValue();
+        if (value instanceof String s) return Long.parseLong(s);
+        return null;
     }
 }
 // wiek przy rejestracji -histogram/rozklad wieku
