@@ -10,9 +10,13 @@ import reporting.repository.AiErrorsRepository;
 import reporting.repository.GamesRepository;
 import reporting.repository.MovesRepository;
 import reporting.repository.UsersRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class StatsStore {
+
+    private static final Logger log = LoggerFactory.getLogger(StatsStore.class);
 
     private final UsersRepository usersRepository;
     private final GamesRepository gamesRepository;
@@ -28,14 +32,6 @@ public class StatsStore {
         this.movesRepository = movesRepository;
         this.aiErrorsRepository = aiErrorsRepository;
     }
-    // flyway, chce miec tabele z grami
-    // potrzebujemy tabele, 1 tabela z uzytkownikami, identyfikator uzytkownika, ilu sie rejestruje,
-    // ile srednio gier tworzy uzytkownik, data kiedy uzytkownik dolaczyl,
-    // 2 w momencie stworzenia gry, id, czy sie zakonczyla, czas utworzenia gry
-    // 3. ile ruchow, identyfikator ruchu, czas wykonania ruchu
-    // 4. ai error, id , czas bledu, komunikat bledu, moze tekstowy komunikat
-    // czy umiejetnosci gracza rosna wraz z okresem uzytkowania
-    //histogram wyznaczony z 1 tabeli, policzyc w jakim miesiacu uzytkownicy sie najczesciej rejestruja
 
     @Transactional
     public void handle(EventEnvelope event) {
@@ -64,13 +60,12 @@ public class StatsStore {
                 String message = String.valueOf(event.payload().get("message"));
                 aiErrorsRepository.save(new ReportingAiError(gameId, event.occurredAt(), message));
             }
-            default -> {}
+            default -> {
+            }
         }
 
-        System.out.println("📊 STATS: users=" + getRegisteredUsers()
-                + " games=" + getGamesCreated()
-                + " finished=" + getGamesFinished()
-                + " abandoned=" + getAbandonedGames());
+        log.info("📊 STATS: users={} games={} finished={} abandoned={}",
+                getRegisteredUsers(), getGamesCreated(), getGamesFinished(), getAbandonedGames());
     }
 
     public int getRegisteredUsers() {
@@ -110,9 +105,4 @@ public class StatsStore {
         return null;
     }
 }
-// wiek przy rejestracji -histogram/rozklad wieku
-// % gier rozegranych z AI,
-//ile gier sie zakonczylo, a ile zostalo porzuconych
-// normalny gracz nie ma dostepu, to tylko dla admin
-// najpierw wrzucanie i odbieranie z kafki
 

@@ -13,7 +13,7 @@ public interface GamesRepository extends JpaRepository<ReportingGame, Long> {
     @Query("SELECT COUNT(g) FROM ReportingGame g WHERE g.isAi = true")
     long countAiGames();
 
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("UPDATE ReportingGame g SET g.finished = true WHERE g.id = :gameId")
     void markAsFinished(Long gameId);
 }

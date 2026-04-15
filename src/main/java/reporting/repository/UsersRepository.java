@@ -10,4 +10,5 @@ public interface UsersRepository extends JpaRepository<ReportingUser, Long> {
 
     @Query("SELECT MONTH(u.registeredAt), COUNT(u) FROM ReportingUser u GROUP BY MONTH(u.registeredAt)")
     List<Object[]> countByMonth();
+
 }
